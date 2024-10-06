@@ -8,14 +8,16 @@ def hex_to_binary(hex_string):
     return bin(decimal_value)[2:].zfill(64)
 
 
+def binary_to_hex(binary_string):
+    return hex(int(binary_string, 2))[2:].zfill(16)
+
+
 def string_to_binary(input_string):
     binary_rep = "".join(format(ord(i), "08b") for i in input_string)
     # split to array of 64 bits
     binary_reps_64 = [binary_rep[i : i + 64] for i in range(0, len(binary_rep), 64)]
-
     # padding the last elemnt if not 64 bits
-    binary_reps_64[-1] = binary_reps_64[-1].ljust(64, "0")
-
+    binary_reps_64[-1] = binary_reps_64[-1].zfill(64)
     return binary_reps_64
 
 
@@ -55,6 +57,11 @@ def key_rounded(binary_key):
 
 def des_encrypt(plain_text, key):
     # 64 bits binary plain text
+    # hex_plain_text = plain_text.encode("utf-8").hex()
+    # binary_64_arr = [
+    #     hex_to_binary(hex_plain_text[i : i + 16])
+    #     for i in range(0, len(hex_plain_text), 16)
+    # ]
     binary_64_arr = string_to_binary(plain_text)
     round_keys = key_rounded(hex_to_binary(key))
     cipers = []
@@ -97,7 +104,8 @@ def des_encrypt(plain_text, key):
         # final permutation
         final_pt = right_pt + left_pt
         final_cp = "".join([final_pt[i - 1] for i in tables.IP_REVERSE])
-        cipers.append(hex(int(final_cp, 2))[2:])
+        cipers.append(binary_to_hex(final_cp))
+
     return "".join(cipers)
 
 
@@ -107,7 +115,6 @@ def des_decrypt(ciper_text, key):
     # devide chiper_tex to 64 bit each
     chiper_text_64 = [ciper_text[i : i + 16] for i in range(0, len(ciper_text), 16)]
     plaintext = []
-
     for cp_text in chiper_text_64:
         bin_cp = hex_to_binary(cp_text)
         ip_str = initial_permutate(bin_cp)
@@ -141,6 +148,8 @@ def des_decrypt(ciper_text, key):
             right_pt = new_right_pt
         final_pt = right_pt + left_pt
         final_pl = "".join([final_pt[i - 1] for i in tables.IP_REVERSE])
+        # print(f"{ks} = {final_pl}")
+
         plaintext.append(binary_to_ascii(final_pl))
 
     return "".join(plaintext)
