@@ -34,18 +34,19 @@ def get_all_connection(key, username):
 def single_clinet(conn, username, key):
     while True:
         print(f"Waiting message to {username}...")
-        conns = get_all_connection(key, username)
-        message = conn.recv(1024).decode()
-        if not message:
+        message, sender = extract_message(conn.recv(1024).decode())
+
+        if message == "bye":
             break
-        message = json.loads(message)
-        msg = json.dumps({"sender": message["sender"], "body": message["body"]})
 
-        print(f"Message from {message['sender']} : {message['body']}")
+        msg = create_message(message, sender)
 
-        if username == message["sender"]:
+        print(f"Message from {sender} : {message}")
+
+        conns = get_all_connection(key, username)
+        if username == sender:
             for j in conns:
-                print(j["conn"])
+                print(f"Sended to : {j['username']}")
                 j["conn"].send(msg.encode())
         else:
             conn.send(msg.encode())
@@ -55,7 +56,7 @@ def single_clinet(conn, username, key):
 
 def server_program():
     host = socket.gethostname()
-    port = 5051
+    port = 5052
     server_socket = socket.socket()
     server_socket.bind((host, port))
     server_socket.listen()
