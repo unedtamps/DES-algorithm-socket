@@ -6,6 +6,8 @@
 import json
 import socket
 import threading
+import time
+from os import pipe
 
 import lib
 
@@ -36,9 +38,6 @@ def single_clinet(conn, username, key):
         print(f"Waiting message to {username}...")
         message, sender = extract_message(conn.recv(1024).decode())
 
-        if message == "bye":
-            break
-
         msg = create_message(message, sender)
 
         print(f"Message from {sender} : {message}")
@@ -51,12 +50,21 @@ def single_clinet(conn, username, key):
         else:
             conn.send(msg.encode())
 
+        if message.lower().strip() == "bye":
+            # delete from database
+            for chan in database:
+                if chan["key"] == key:
+                    chan["user"] = [
+                        user for user in chan["user"] if user["username"] != username
+                    ]
+            break
+
     conn.close()
 
 
 def server_program():
     host = socket.gethostname()
-    port = 5052
+    port = 5056
     server_socket = socket.socket()
     server_socket.bind((host, port))
     server_socket.listen()
@@ -67,6 +75,7 @@ def server_program():
         print("Connection from: " + str(address))
         username = ""
         key = ""
+        is_user_exist = False
 
         # Send menu to the client
 
@@ -94,41 +103,64 @@ def server_program():
             )
             data = create_message(f"Channel Key : {key}", "Server")
             conn.send(data.encode())
+            data = create_message(
+                f"Channel Encryption Key : {lib.key_generation()}", "Server"
+            )
+            conn.send(data.encode())
         elif menu == "2":
             # Join Channeli
-            data = create_message("Enter Key Channel: ", "Server")
-            conn.send(data.encode())
-            key, _ = extract_message(conn.recv(1024).decode())
-            if not key:
-                break
-
-            data = create_message("Enter Password Channel: ", "Server")
-            conn.send(data.encode())
-            input_password, _ = extract_message(conn.recv(1024).decode())
-            if not input_password:
-                break
-
-            for i in database:
-                if i["key"] == key and i["password"] == hash(input_password):
-                    data = create_message("You are connected start chating", "Server")
-                    conn.send(data.encode())
-
-                    for j in i["user"]:
-                        if j["username"] == username:
-                            break
-                    else:
-                        i["user"].append({"username": username, "conn": conn})
-                        break
-
-            else:
-                data = create_message("Channel not found", "Server")
+            while True:
+                data = create_message("Enter Key Channel: ", "Server")
                 conn.send(data.encode())
-                continue
+                key, _ = extract_message(conn.recv(1024).decode())
+                if not key:
+                    break
 
-        client_thread = threading.Thread(
-            target=single_clinet, args=(conn, username, key)
-        )
-        client_thread.start()
+                data = create_message("Enter Password Channel: ", "Server")
+                conn.send(data.encode())
+                input_password, _ = extract_message(conn.recv(1024).decode())
+                if not input_password:
+                    break
+
+                for i in database:
+                    if i["key"] == key and i["password"] == hash(input_password):
+                        conns = i["user"]
+                        for j in i["user"]:
+                            if j["username"] == username:
+                                is_user_exist = True
+                                break
+                        else:
+                            data = create_message(
+                                "You are connected start chating", "Server"
+                            )
+                            conn.send(data.encode())
+                            for k in conns:
+                                k["conn"].send(
+                                    create_message(
+                                        f"{username} has joined the channel", "Server"
+                                    ).encode()
+                                )
+                            i["user"].append({"username": username, "conn": conn})
+                        break
+                else:
+                    data = create_message("Channel not found", "Server")
+                    conn.send(data.encode())
+                    time.sleep(0.2)
+                    continue
+
+                break
+
+        if is_user_exist:
+            data = create_message(
+                "Username already exist, Enter 2 times to close ", "Server"
+            )
+            conn.send(data.encode())
+            conn.close()
+        else:
+            client_thread = threading.Thread(
+                target=single_clinet, args=(conn, username, key)
+            )
+            client_thread.start()
 
 
 if __name__ == "__main__":
