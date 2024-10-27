@@ -7,23 +7,35 @@ import json
 import socket
 import threading
 import time
-from os import pipe
 
 import lib
 
 database = []
 # username
-
-# message = {"sender": "", "body": ""}
+SERVER_KEY = "db4b60092e536e47"
+SERVER = "SERVER"
 
 
 def extract_message(message):
+    if not message:
+        return "", ""
     message = json.loads(message)
     return message["body"], message["sender"]
 
 
 def create_message(body, sender):
     return json.dumps({"sender": sender, "body": body})
+
+
+def server_create_message(body, sender):
+    return json.dumps({"sender": sender, "body": lib.des_encrypt(body, SERVER_KEY)})
+
+
+def server_extract_message(message):
+    if not message:
+        return "", ""
+    message = json.loads(message)
+    return lib.des_decrypt(message["body"], SERVER_KEY), message["sender"]
 
 
 def get_all_connection(key, username):
@@ -35,8 +47,11 @@ def get_all_connection(key, username):
 
 def single_clinet(conn, username, key):
     while True:
-        print(f"Waiting message to {username}...")
+        # print(f"Waiting message to {username}...")
         message, sender = extract_message(conn.recv(1024).decode())
+
+        if not message:
+            break
 
         msg = create_message(message, sender)
 
@@ -50,21 +65,23 @@ def single_clinet(conn, username, key):
         else:
             conn.send(msg.encode())
 
-        if message.lower().strip() == "bye":
-            # delete from database
-            for chan in database:
-                if chan["key"] == key:
-                    chan["user"] = [
-                        user for user in chan["user"] if user["username"] != username
-                    ]
-            break
+    print(f"Connection Close: {username}")
+    for chan in database:
+        if chan["key"] == key:
+            chan["user"] = [
+                user for user in chan["user"] if user["username"] != username
+            ]
 
+    for j in get_all_connection(key, username):
+        print(f"Sended to : {j['username']}")
+        data = server_create_message(f"{username} DISCONNECTED", SERVER)
+        j["conn"].send(data.encode())
     conn.close()
 
 
 def server_program():
     host = socket.gethostname()
-    port = 5056
+    port = 5054
     server_socket = socket.socket()
     server_socket.bind((host, port))
     server_socket.listen()
@@ -79,20 +96,36 @@ def server_program():
 
         # Send menu to the client
 
-        msg = create_message("\n1. Make New Channel\n2. Join Channel\n", "Server")
+        msg = server_create_message(
+            "\n1. Make New Channel\n2. Join Channel\n",
+            SERVER,
+        )
         conn.send(msg.encode())
 
-        menu, username = extract_message(conn.recv(1024).decode())
+        menu, username = server_extract_message(conn.recv(1024).decode())
         if not menu:
-            break
+            print(f"Connection Close: {address}")
+            conn.close()
+            continue
+        menu = menu.replace("\x00", "")
+
+        if username.lower().strip() == SERVER.lower().strip():
+            data = server_create_message("Username not avaliable: ", SERVER)
+            conn.send(data.encode())
+            print(f"Connection Close: {address}")
+            time.sleep(0.1)
+            conn.close()
+            continue
 
         if menu == "1":
             key = lib.key_generation()
-            data = create_message("Enter New Password: ", "Server")
+            data = server_create_message("Enter New Password: ", SERVER)
             conn.send(data.encode())
-            password, _ = extract_message(conn.recv(1024).decode())
+            password, _ = server_extract_message(conn.recv(1024).decode())
             if not password:
-                break
+                print(f"Connection Close: {address}")
+                conn.close()
+                continue
 
             database.append(
                 {
@@ -101,25 +134,28 @@ def server_program():
                     "user": [{"username": username, "conn": conn}],
                 }
             )
-            data = create_message(f"Channel Key : {key}", "Server")
+            data = server_create_message(f"Channel Key : {key}", SERVER)
             conn.send(data.encode())
-            data = create_message(
-                f"Channel Encryption Key : {lib.key_generation()}", "Server"
-            )
+            time.sleep(0.1)
+            data = server_create_message("Your are CONNECTED", SERVER)
             conn.send(data.encode())
+            time.sleep(0.1)
         elif menu == "2":
             # Join Channeli
+            is_close = False
             while True:
-                data = create_message("Enter Key Channel: ", "Server")
+                data = server_create_message("Enter Key Channel: ", SERVER)
                 conn.send(data.encode())
-                key, _ = extract_message(conn.recv(1024).decode())
+                key, _ = server_extract_message(conn.recv(1024).decode())
                 if not key:
+                    is_close = True
                     break
 
-                data = create_message("Enter Password Channel: ", "Server")
+                data = server_create_message("Enter Password Channel: ", SERVER)
                 conn.send(data.encode())
-                input_password, _ = extract_message(conn.recv(1024).decode())
+                input_password, _ = server_extract_message(conn.recv(1024).decode())
                 if not input_password:
+                    is_close = True
                     break
 
                 for i in database:
@@ -130,30 +166,38 @@ def server_program():
                                 is_user_exist = True
                                 break
                         else:
-                            data = create_message(
-                                "You are connected start chating", "Server"
-                            )
+                            data = server_create_message("You are CONNECTED", SERVER)
                             conn.send(data.encode())
                             for k in conns:
                                 k["conn"].send(
-                                    create_message(
-                                        f"{username} has joined the channel", "Server"
+                                    server_create_message(
+                                        f"{username} JOINED", SERVER
                                     ).encode()
                                 )
                             i["user"].append({"username": username, "conn": conn})
                         break
                 else:
-                    data = create_message("Channel not found", "Server")
+                    data = server_create_message("Channel not found", SERVER)
                     conn.send(data.encode())
                     time.sleep(0.2)
                     continue
 
                 break
+            if is_close:
+                print(f"Connection Close: {address}")
+                conn.close()
+                continue
+        else:
+            data = server_create_message("Menu not found", SERVER)
+            conn.send(data.encode())
+            print(f"Connection Close: {address}")
+            time.sleep(0.1)
+            conn.close()
+            continue
 
         if is_user_exist:
-            data = create_message(
-                "Username already exist, Enter 2 times to close ", "Server"
-            )
+            data = server_create_message("Username already exist ", SERVER)
+            print(f"Connection Close: {address}")
             conn.send(data.encode())
             conn.close()
         else:
