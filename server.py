@@ -1,8 +1,3 @@
-# Recananya sih server bakal buka 2 koneksi gitu dan cuman bisa dua ?
-# Atau kaya masukin key gitu, terus lawan bicara masukkan key nya ?
-# Mereka sharking key jadi bisa banyak koneksi server bisa baca , kaya from
-# client ini message tapi depracated
-
 import json
 import socket
 import threading
