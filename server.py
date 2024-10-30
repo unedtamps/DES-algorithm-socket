@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import threading
 import time
@@ -76,7 +77,7 @@ def single_clinet(conn, username, key):
 
 def server_program():
     host = socket.gethostname()
-    port = 5054
+    port = int(os.environ["PORT"])
     server_socket = socket.socket()
     server_socket.bind((host, port))
     server_socket.listen()

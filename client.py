@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import threading
 
@@ -46,11 +47,22 @@ def recive_message(client_socket):
 
 def client_program():
     host = socket.gethostname()  # as both code is running on same pc
-    port = 5054  # socket server port number
+    port = int(os.environ["PORT"])
     global client_key
 
-    username = input("Input your username: ")
-    client_key = input("Input your client key: ")
+    try:
+        username = input("Username: ")
+        client_key = input("Message key: ")
+
+        if not username:
+            raise ValueError("Username cannot empty")
+
+        if len(client_key) != 16:
+            raise ValueError("Key must 64bit")
+
+    except ValueError as e:
+        print(f"Error : {e}")
+        return
 
     client_socket = socket.socket()  # instantiate
     client_socket.connect((host, port))  # connect to the server
@@ -64,7 +76,7 @@ def client_program():
         try:
             message = input()  # take input
         except:
-            print("Keyboard interupt")
+            print("interupt")
             break
 
         if message == "":
@@ -72,15 +84,14 @@ def client_program():
             continue
 
         try:
-            client_socket.send(
-                create_message(message, username).encode()
-            )  # send message
+            client_socket.send(create_message(message, username).encode())
         except:
             print("Not valid input")
             break
 
         print("\033[1A" + "\033[K", end="")
         print(f"(you) {message}")
+
     client_socket.close()
 
 
