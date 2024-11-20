@@ -1,3 +1,5 @@
 __pycache__
 test_server.py
 test_client.py
+.env
+pka-client.py

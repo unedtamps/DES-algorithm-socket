@@ -3,13 +3,22 @@ import os
 import socket
 import threading
 
+from dotenv import load_dotenv
+
 import lib
+from rsa import RSA
+from server import get_public_key, send_public_key
+
+load_dotenv()
 
 messages = []
 client_key = ""
 server_key = "db4b60092e536e47"
 key = server_key
 SERVER = "SERVER"
+SERVER_PUBLIC_KEY = None
+PRIVATE_KEY = None
+PUBLIC_KEY = None
 
 
 def extract_message(message):
@@ -18,7 +27,16 @@ def extract_message(message):
 
 
 def create_message(body, sender):
-    return json.dumps({"sender": sender, "body": lib.des_encrypt(body, key)})
+    key_dec = lib.key_generation()
+    print(key_dec)
+    rsa_encrypt_key = RSA().encrypt(SERVER_PUBLIC_KEY, key_dec)
+    return json.dumps(
+        {
+            "sender": sender,
+            "body": lib.des_encrypt(body, key_dec),
+            "message_key": rsa_encrypt_key,
+        }
+    )
 
 
 def recive_message(client_socket):
@@ -36,9 +54,6 @@ def recive_message(client_socket):
             key = client_key
 
         message = lib.des_decrypt(message, key).replace("\x00", "")
-        # print(repr(message))
-        # print("connected" in message.lower().strip())
-        # print("CONNECTED" == message)
         if "CONNECTED" in message or "JOINED" in message or "DISCONNECTED" in message:
             key = client_key
 
@@ -47,8 +62,9 @@ def recive_message(client_socket):
 
 def client_program():
     host = socket.gethostname()  # as both code is running on same pc
-    port = int(os.environ["PORT"])
+    port = int(os.getenv("SERVER_PORT", "5500"))
     global client_key
+    global PRIVATE_KEY, PUBLIC_KEY, SERVER_PUBLIC_KEY
 
     try:
         username = input("Username: ")
@@ -66,6 +82,15 @@ def client_program():
 
     client_socket = socket.socket()  # instantiate
     client_socket.connect((host, port))  # connect to the server
+
+    # send id for public key
+
+    id_temp = lib.key_generation()
+    PUBLIC_KEY, PRIVATE_KEY = RSA().generate_keys()
+    send_public_key(PUBLIC_KEY, id_temp)
+    SERVER_PUBLIC_KEY = get_public_key(SERVER)
+    client_socket.send(create_message(id_temp, username).encode())
+
     client_thread = threading.Thread(
         target=recive_message,
         args=(client_socket,),
