@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 
 import lib
 from rsa import RSA
-from server import get_public_key, send_public_key
 
 load_dotenv()
 
@@ -16,6 +15,7 @@ SERVER = "SERVER"
 SERVER_PUBLIC_KEY = None
 PRIVATE_KEY = None
 PUBLIC_KEY = None
+PA_U = (1663177, 2295287)
 
 
 def extract_message(message):
@@ -48,7 +48,7 @@ def recive_message(client_socket, username):
         message = lib.des_decrypt(message, des_key).replace("\x00", "")
         if sender == SERVER and ("CONNECTED" in message):
             PUBLIC_KEY, PRIVATE_KEY = RSA().generate_keys()
-            send_public_key(PUBLIC_KEY, username)
+            lib.send_public_key(PUBLIC_KEY, username, PA_U)
 
         print(f"({sender}) {message}")
 
@@ -75,8 +75,8 @@ def client_program():
 
     id_temp = lib.key_generation()
     PUBLIC_KEY, PRIVATE_KEY = RSA().generate_keys()
-    send_public_key(PUBLIC_KEY, id_temp)
-    SERVER_PUBLIC_KEY = get_public_key(SERVER)
+    lib.send_public_key(PUBLIC_KEY, id_temp, PA_U)
+    SERVER_PUBLIC_KEY = lib.get_public_key(SERVER, PA_U)
     client_socket.send(create_message(id_temp, username).encode())
 
     client_thread = threading.Thread(

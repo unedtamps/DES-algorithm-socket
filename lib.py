@@ -1,6 +1,9 @@
 import os
+import socket
+import time
 
 import tables
+from rsa import RSA
 
 
 def hex_to_binary(hex_string):
@@ -153,3 +156,42 @@ def des_decrypt(ciper_text, key):
         plaintext.append(binary_to_ascii(final_pl))
 
     return "".join(plaintext)
+
+
+def send_public_key(send_key, username, encrypt_key):
+    pka_host = socket.gethostname()
+    pka_port = int(os.getenv("PKA_PORT", "5000"))
+    pka_server_socket = socket.socket()
+    pka_server_socket.connect((pka_host, pka_port))
+    pka_server_socket.send("1".encode())
+    time.sleep(0.1)
+    e, n = send_key
+    msg = f"{username},{e},{n}"
+    encrypt_message = RSA().encrypt(encrypt_key, msg)
+    pka_server_socket.send(list_to_string(encrypt_message).encode())
+
+
+def get_public_key(username, encrypt_key):
+    pka_host = socket.gethostname()
+    pka_port = int(os.getenv("PKA_PORT", "5000"))
+    pka_server_socket = socket.socket()
+    pka_server_socket.connect((pka_host, pka_port))
+    pka_server_socket.send("2".encode())
+    time.sleep(0.1)
+    username = RSA().encrypt(encrypt_key, username)
+
+    pka_server_socket.send(list_to_string(username).encode())
+    msg = pka_server_socket.recv(1024).decode()
+    msg = string_to_list(msg)
+    msg = RSA().decrypt(encrypt_key, msg)
+    msg = msg.split(",")
+    return int(msg[0]), int(msg[1])
+
+
+def list_to_string(int_list):
+    result = ",".join(str(num) for num in int_list)
+    return result
+
+
+def string_to_list(string):
+    return list(map(int, string.split(",")))

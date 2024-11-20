@@ -13,38 +13,12 @@ load_dotenv()
 
 database = []
 # username
-SERVER_KEY = "db4b60092e536e47"
 SERVER = "SERVER"
 PA_U = (1663177, 2295287)
 PRIVATE_KEY = None
 # jadi server ini yang bakal minta public key dari pka, dan memasukkannya ke
 # dalam databae untuk semua public key, dan kalau sudah semua baru lah  bisa di
 # jalankan
-
-
-def send_public_key(key, username):
-    pka_host = socket.gethostname()
-    pka_port = int(os.getenv("PKA_PORT", "5000"))
-    pka_server_socket = socket.socket()
-    pka_server_socket.connect((pka_host, pka_port))
-    pka_server_socket.send("1".encode())
-    time.sleep(0.1)
-    e, n = key
-    msg = f"{username},{e},{n}"
-    pka_server_socket.send(msg.encode())
-
-
-def get_public_key(username):
-    pka_host = socket.gethostname()
-    pka_port = int(os.getenv("PKA_PORT", "5000"))
-    pka_server_socket = socket.socket()
-    pka_server_socket.connect((pka_host, pka_port))
-    pka_server_socket.send("2".encode())
-    time.sleep(0.1)
-    pka_server_socket.send(username.encode())
-    msg = pka_server_socket.recv(1024).decode()
-    msg = msg.split(",")
-    return int(msg[0]), int(msg[1])
 
 
 # def delete_public_key(key, username):
@@ -122,12 +96,15 @@ def single_clinet(conn, username, key):
         if username == sender:
             for j in conns:
                 print(f"Sended to : {j['username']}")
-                if j["public_key"] == "":
-                    j["public_key"] = get_public_key(j["username"])
+                if j["public_key"] is None:
+                    j["public_key"] = lib.get_public_key(j["username"], PA_U)
+                    time.sleep(0.1)
                 msg = create_message(message, sender, j["public_key"], message_key)
                 j["conn"].send(msg.encode())
         else:
-            msg = create_message(message, sender, get_public_key(username), message_key)
+            msg = create_message(
+                message, sender, lib.get_public_key(username, PA_U), message_key
+            )
             conn.send(msg.encode())
 
     print(f"Connection Close: {username}")
@@ -156,7 +133,7 @@ def server_program():
 
     # generate key and store to authority
     public_key, PRIVATE_KEY = RSA().generate_keys()
-    send_public_key(public_key, SERVER)
+    lib.send_public_key(public_key, SERVER, PA_U)
 
     while True:
         print("Waiting for connections ...")
@@ -168,7 +145,7 @@ def server_program():
 
         # ambil dulu public key dari user ini
         id_key_user, _ = server_extract_message(conn.recv(1024).decode())
-        public_key_user = get_public_key(id_key_user)
+        public_key_user = lib.get_public_key(id_key_user, PA_U)
 
         # Send menu to the client
         msg = server_create_message(
@@ -211,7 +188,7 @@ def server_program():
                 {
                     "key": key,
                     "password": hash(password),
-                    "user": [{"username": username, "conn": conn, "public_key": ""}],
+                    "user": [{"username": username, "conn": conn, "public_key": None}],
                 }
             )
             data = server_create_message(
@@ -258,9 +235,9 @@ def server_program():
                             conn.send(data.encode())
                             for k in conns:
                                 sended_user_public_key = k["public_key"]
-                                if sended_user_public_key == "":
-                                    sended_user_public_key = get_public_key(
-                                        k["username"]
+                                if sended_user_public_key is None:
+                                    sended_user_public_key = lib.get_public_key(
+                                        k["username"], PA_U
                                     )
                                 k["conn"].send(
                                     server_create_message(
@@ -270,7 +247,7 @@ def server_program():
                                     ).encode()
                                 )
                             i["user"].append(
-                                {"username": username, "conn": conn, "public_key": ""}
+                                {"username": username, "conn": conn, "public_key": None}
                             )
                         break
                 else:

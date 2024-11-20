@@ -3,10 +3,13 @@ import socket
 
 from dotenv import load_dotenv
 
+import lib
+from rsa import RSA
+
 ## nanti  bakal ada database di pka ini untuk semuanya jadi nanti server balkal
 ## minta public key untuk semua yang ada bebas public key
 
-PU_R = (571969, 2295287)
+PR_A = (571969, 2295287)
 
 
 key_database = []
@@ -29,6 +32,8 @@ def socket_charge():
         msg = conn.recv(1024).decode()
         if msg == "1":
             msg = conn.recv(1024).decode()
+            msg = lib.string_to_list(msg)
+            msg = RSA().decrypt(PR_A, msg)
             key = msg.split(",")
             key_database.append(
                 {"id": key[0], "public_key": (key[1], key[2]), "timeout": 1200}
@@ -42,11 +47,14 @@ def socket_charge():
 
         elif msg == "2":
             msg = conn.recv(1024).decode()
+            msg = lib.string_to_list(msg)
+            msg = RSA().decrypt(PR_A, msg)
             for i in key_database:
                 if i["id"] == msg:
                     e, n = i["public_key"]
                     m = f"{e},{n}"
-                    conn.send(m.encode())
+                    m = RSA().encrypt(PR_A, m)
+                    conn.send(lib.list_to_string(m).encode())
                     break
             else:
                 conn.send("0,0".encode())
