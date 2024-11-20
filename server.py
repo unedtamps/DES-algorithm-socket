@@ -66,16 +66,16 @@ def extract_message(message):
     return message["body"], message["sender"], message["message_key"]
 
 
-def create_message(body, sender, user_pubic_key, message_key):
+def create_message(body, sender, user_public_key, message_key):
     ##  decrypt message that user send with server publick key
     decrypt_msg_key = RSA().decrypt(PRIVATE_KEY, message_key)
     ## send key with user to send public key
-    encrypted_key = RSA().encrypt(user_pubic_key, decrypt_msg_key)
+    encrypted_key = RSA().encrypt(user_public_key, decrypt_msg_key)
 
     return json.dumps(
         {
             "sender": sender,
-            "body": lib.des_encrypt(body, decrypt_msg_key),
+            "body": body,
             "message_key": encrypted_key,
         }
     )
@@ -111,7 +111,6 @@ def get_all_connection(key, username):
 
 def single_clinet(conn, username, key):
     while True:
-        # print(f"Waiting message to {username}...")
         message, sender, message_key = extract_message(conn.recv(1024).decode())
 
         if not message:
@@ -128,7 +127,7 @@ def single_clinet(conn, username, key):
                 msg = create_message(message, sender, j["public_key"], message_key)
                 j["conn"].send(msg.encode())
         else:
-            msg = create_message(message, sender, PRIVATE_KEY, message_key)
+            msg = create_message(message, sender, get_public_key(username), message_key)
             conn.send(msg.encode())
 
     print(f"Connection Close: {username}")
@@ -141,7 +140,7 @@ def single_clinet(conn, username, key):
     for j in get_all_connection(key, username):
         print(f"Sended to : {j['username']}")
         data = create_message(
-            f"{username} DISCONNECTED", SERVER, PRIVATE_KEY, lib.key_generation()
+            f"{username} DISCONNECTED", SERVER, j["public_key"], lib.key_generation()
         )
         j["conn"].send(data.encode())
     conn.close()
@@ -258,12 +257,21 @@ def server_program():
                             )
                             conn.send(data.encode())
                             for k in conns:
+                                sended_user_public_key = k["public_key"]
+                                if sended_user_public_key == "":
+                                    sended_user_public_key = get_public_key(
+                                        k["username"]
+                                    )
                                 k["conn"].send(
                                     server_create_message(
-                                        f"{username} JOINED", SERVER, public_key_user
+                                        f"{username} JOINED",
+                                        SERVER,
+                                        sended_user_public_key,
                                     ).encode()
                                 )
-                            i["user"].append({"username": username, "conn": conn})
+                            i["user"].append(
+                                {"username": username, "conn": conn, "public_key": ""}
+                            )
                         break
                 else:
                     data = server_create_message(
