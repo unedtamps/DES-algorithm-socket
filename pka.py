@@ -35,16 +35,7 @@ def socket_charge():
             msg = lib.string_to_list(msg)
             msg = RSA().decrypt(PR_A, msg)
             key = msg.split(",")
-            key_database.append(
-                {"id": key[0], "public_key": (key[1], key[2]), "timeout": 1200}
-            )
-
-            print("List Users:")
-            for i in key_database:
-                print(f'id: {i["id"]}')
-                print(f'public_key: {i["public_key"]}')
-                print(f'timeout: {i["timeout"]}')
-
+            key_database.append({"id": key[0], "public_key": (key[1], key[2])})
         elif msg == "2":
             msg = conn.recv(1024).decode()
             msg = lib.string_to_list(msg)

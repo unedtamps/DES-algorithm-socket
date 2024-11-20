@@ -79,8 +79,14 @@ def server_extract_message(message):
 def get_all_connection(key, username):
     for i in database:
         if i["key"] == key:
-            return [user for user in i["user"] if user["username"] != username]
-    return []
+            # Separate users
+            all_except = [user for user in i["user"] if user["username"] != username]
+            exact_match = next(
+                (user for user in i["user"] if user["username"] == username), None
+            )
+            return all_except, exact_match
+    # Return empty lists if no match found
+    return [], None
 
 
 def single_clinet(conn, username, key):
@@ -92,20 +98,24 @@ def single_clinet(conn, username, key):
 
         print(f"Message from {sender} : {message}")
 
-        conns = get_all_connection(key, username)
+        conns, user_obj = get_all_connection(key, username)
         if username == sender:
             for j in conns:
                 print(f"Sended to : {j['username']}")
                 if j["public_key"] is None:
                     j["public_key"] = lib.get_public_key(j["username"], PA_U)
-                    time.sleep(0.1)
+                    time.sleep(0.3)
                 msg = create_message(message, sender, j["public_key"], message_key)
                 j["conn"].send(msg.encode())
         else:
-            msg = create_message(
-                message, sender, lib.get_public_key(username, PA_U), message_key
-            )
-            conn.send(msg.encode())
+            if user_obj is not None:
+                if user_obj["public_key"] is None:
+                    user_obj["public_key"] = lib.get_public_key(username, PA_U)
+                    time.sleep(0.3)
+                msg = create_message(
+                    message, sender, user_obj["public_key"], message_key
+                )
+                conn.send(msg.encode())
 
     print(f"Connection Close: {username}")
     for chan in database:
@@ -114,12 +124,16 @@ def single_clinet(conn, username, key):
                 user for user in chan["user"] if user["username"] != username
             ]
 
-    for j in get_all_connection(key, username):
-        print(f"Sended to : {j['username']}")
-        data = create_message(
-            f"{username} DISCONNECTED", SERVER, j["public_key"], lib.key_generation()
-        )
-        j["conn"].send(data.encode())
+    # conns, user_obj = get_all_connection(key, username)
+    # for j in conns:
+    #     print(f"Sended to : {j['username']}")
+    #     if j["public_key"] is None:
+    #         j["public_key"] = lib.get_public_key(j["username"], PA_U)
+    #         time.sleep(0.1)
+    #     data = server_create_message(
+    #         f"{username} DISCONNECTED", SERVER, j["public_key"]
+    #     )
+    #     j["conn"].send(data.encode())
     conn.close()
 
 

@@ -44,7 +44,6 @@ def recive_message(client_socket, username):
 
         message, sender, message_key = extract_message(msg)
         des_key = RSA().decrypt(PRIVATE_KEY, message_key)
-        print(f"des key {des_key}")
         message = lib.des_decrypt(message, des_key).replace("\x00", "")
         if sender == SERVER and ("CONNECTED" in message):
             PUBLIC_KEY, PRIVATE_KEY = RSA().generate_keys()
