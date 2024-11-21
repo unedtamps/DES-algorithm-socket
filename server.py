@@ -114,21 +114,21 @@ def get_all_connection(key, username):
 
 
 def single_clinet(conn, username, key):
-
+    n2 = 0
+    user_public_key = ""
+    _, user_obj = get_all_connection(key, username)
+    if user_obj is not None:
+        if user_obj["public_key"] is None:
+            user_obj["public_key"] = lib.get_public_key(username, PA_U)
+            time.sleep(0.2)
+        n2 = user_obj["n2"]
+        user_public_key = user_obj["public_key"]
     while True:
-        n2 = 0
-        user_public_key = ""
-        conns, user_obj = get_all_connection(key, username)
-        if user_obj is not None:
-            if user_obj["public_key"] is None:
-                user_obj["public_key"] = lib.get_public_key(username, PA_U)
-                time.sleep(0.2)
-            n2 = user_obj["n2"]
-            user_public_key = user_obj["public_key"]
 
         message, sender, message_key, n2_user = extract_message(
             conn.recv(2048).decode(), user_public_key
         )
+        conns, user_obj = get_all_connection(key, username)
 
         if not message:
             break
@@ -140,39 +140,20 @@ def single_clinet(conn, username, key):
             print("n2 not same and valid (message not from the connected user)")
             continue
 
-        if username == sender:
-            for j in conns:
-                print(f"Sended to : {j['username']}")
-                if j["public_key"] is None:
-                    j["public_key"] = lib.get_public_key(j["username"], PA_U)
-                    time.sleep(0.3)
-                msg = create_message(
-                    message,
-                    sender,
-                    j["public_key"],
-                    message_key,
-                    j["n2"],
-                    user_public_key,
-                )
-                j["conn"].send(msg.encode())
-        else:
-            print("masuk kirim ke user")
-            _, sender_obj = get_all_connection(key, sender)
-            sender_key = ""
-            if sender_obj is not None:
-                if sender_obj["public_key"] is None:
-                    sender_obj["public_key"] = lib.get_public_key(username, PA_U)
-                    time.sleep(0.2)
-                sender_key = sender_obj["public_key"]
+        for j in conns:
+            print(f"Sended to : {j['username']}")
+            if j["public_key"] is None:
+                j["public_key"] = lib.get_public_key(j["username"], PA_U)
+                time.sleep(0.3)
             msg = create_message(
                 message,
                 sender,
-                user_public_key,
+                j["public_key"],
                 message_key,
-                n2,
-                sender_key,
+                j["n2"],
+                user_public_key,
             )
-            conn.send(msg.encode())
+            j["conn"].send(msg.encode())
 
     print(f"Connection Close: {username}")
     for chan in database:
