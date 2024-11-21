@@ -35,13 +35,18 @@ def extract_message(message):
 def create_message(body, sender):
     global SERVER_PUBLIC_KEY
     key_dec = lib.key_generation()
-    rsa_encrypt_key = RSA().encrypt(SERVER_PUBLIC_KEY, key_dec)
+    rsa_encrypt_key = RSA().encrypt(PRIVATE_KEY, key_dec)
+    rsa_encrypt_key = RSA().encrypt(
+        SERVER_PUBLIC_KEY, lib.list_to_string(rsa_encrypt_key)
+    )
+    n2 = RSA().encrypt(PRIVATE_KEY, N2)
+    n2 = RSA().encrypt(SERVER_PUBLIC_KEY, lib.list_to_string(n2))
     return json.dumps(
         {
             "sender": sender,
             "body": lib.des_encrypt(body, key_dec),
             "message_key": rsa_encrypt_key,
-            "n2": RSA().encrypt(SERVER_PUBLIC_KEY, N2),
+            "n2": n2,
         }
     )
 
@@ -49,13 +54,15 @@ def create_message(body, sender):
 def recive_message(client_socket):
     while True:
         global PRIVATE_KEY, PUBLIC_KEY, N2
-        msg = client_socket.recv(1024).decode()
+        msg = client_socket.recv(2048).decode()
         if not msg:
             break
 
         message, sender, message_key, n2 = extract_message(msg)
         des_key = RSA().decrypt(PRIVATE_KEY, message_key)
+        des_key = RSA().decrypt(SERVER_PUBLIC_KEY, lib.string_to_list(des_key))
         n2 = RSA().decrypt(PRIVATE_KEY, n2)
+        n2 = RSA().decrypt(SERVER_PUBLIC_KEY, lib.string_to_list(n2))
         if n2 != N2:
             print("Connection not secure")
             continue
@@ -103,7 +110,7 @@ def client_program():
     )
     print("Starting handshake..")
     client_socket.send(msg.encode())
-    message = json.loads(client_socket.recv(1024).decode())
+    message = json.loads(client_socket.recv(2048).decode())
     get_des_key = RSA().decrypt(PRIVATE_KEY, message["message_key"])
     msg = (lib.des_decrypt(message["body"], get_des_key),)
     n1_server = RSA().decrypt(PRIVATE_KEY, message["n1"])

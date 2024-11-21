@@ -36,21 +36,27 @@ PRIVATE_KEY = None
 #     pka_server_socket.send(msg.encode())
 
 
-def extract_message(message):
+def extract_message(message, user_public_key):
     if not message:
         return "", "", "", ""
     message = json.loads(message)
     message["n2"] = RSA().decrypt(PRIVATE_KEY, message["n2"])
+    message["n2"] = RSA().decrypt(user_public_key, lib.string_to_list(message["n2"]))
     return message["body"], message["sender"], message["message_key"], message["n2"]
 
 
-def create_message(body, sender, user_public_key, message_key, n2):
+def create_message(body, sender, user_public_key, message_key, n2, sender_public_key):
     ##  decrypt message that user send with server publick key
     decrypt_msg_key = RSA().decrypt(PRIVATE_KEY, message_key)
+    decrypt_msg_key = RSA().decrypt(
+        sender_public_key, lib.string_to_list(decrypt_msg_key)
+    )
     ## send key with user to send public key
-    encrypted_key = RSA().encrypt(user_public_key, decrypt_msg_key)
+    encrypted_key = RSA().encrypt(PRIVATE_KEY, decrypt_msg_key)
+    encrypted_key = RSA().encrypt(user_public_key, lib.list_to_string(encrypted_key))
 
-    n2 = RSA().encrypt(user_public_key, n2)
+    n2 = RSA().encrypt(PRIVATE_KEY, n2)
+    n2 = RSA().encrypt(user_public_key, lib.list_to_string(n2))
 
     return json.dumps(
         {
@@ -64,8 +70,10 @@ def create_message(body, sender, user_public_key, message_key, n2):
 
 def server_create_message(body, sender, user_public_key, n2):
     message_key = lib.key_generation()
-    encrypted_key = RSA().encrypt(user_public_key, message_key)
-    n2 = RSA().encrypt(user_public_key, n2)
+    encrypted_key = RSA().encrypt(PRIVATE_KEY, message_key)
+    encrypted_key = RSA().encrypt(user_public_key, lib.list_to_string(encrypted_key))
+    n2 = RSA().encrypt(PRIVATE_KEY, n2)
+    n2 = RSA().encrypt(user_public_key, lib.list_to_string(n2))
 
     return json.dumps(
         {
@@ -77,12 +85,14 @@ def server_create_message(body, sender, user_public_key, n2):
     )
 
 
-def server_extract_message(message):
+def server_extract_message(message, user_public_key):
     if not message:
         return "", "", ""
     message = json.loads(message)
     get_des_key = RSA().decrypt(PRIVATE_KEY, message["message_key"])
+    get_des_key = RSA().decrypt(user_public_key, lib.string_to_list(get_des_key))
     message["n2"] = RSA().decrypt(PRIVATE_KEY, message["n2"])
+    message["n2"] = RSA().decrypt(user_public_key, lib.string_to_list(message["n2"]))
     return (
         lib.des_decrypt(message["body"], get_des_key),
         message["sender"],
@@ -106,19 +116,24 @@ def get_all_connection(key, username):
 def single_clinet(conn, username, key):
 
     while True:
+        n2 = 0
+        user_public_key = ""
+        conns, user_obj = get_all_connection(key, username)
+        if user_obj is not None:
+            if user_obj["public_key"] is None:
+                user_obj["public_key"] = lib.get_public_key(username, PA_U)
+                time.sleep(0.2)
+            n2 = user_obj["n2"]
+            user_public_key = user_obj["public_key"]
+
         message, sender, message_key, n2_user = extract_message(
-            conn.recv(1024).decode()
+            conn.recv(2048).decode(), user_public_key
         )
 
         if not message:
             break
 
-        conns, user_obj = get_all_connection(key, username)
-
-        n2 = 0
         print(f"Message from {sender} : {message}")
-        if user_obj is not None:
-            n2 = user_obj["n2"]
 
         print(f" N_user: {n2_user}; N_database : {n2}")
         if n2_user != n2:
@@ -132,18 +147,32 @@ def single_clinet(conn, username, key):
                     j["public_key"] = lib.get_public_key(j["username"], PA_U)
                     time.sleep(0.3)
                 msg = create_message(
-                    message, sender, j["public_key"], message_key, j["n2"]
+                    message,
+                    sender,
+                    j["public_key"],
+                    message_key,
+                    j["n2"],
+                    user_public_key,
                 )
                 j["conn"].send(msg.encode())
         else:
-            if user_obj is not None:
-                if user_obj["public_key"] is None:
-                    user_obj["public_key"] = lib.get_public_key(username, PA_U)
-                    time.sleep(0.3)
-                msg = create_message(
-                    message, sender, user_obj["public_key"], message_key, n2
-                )
-                conn.send(msg.encode())
+            print("masuk kirim ke user")
+            _, sender_obj = get_all_connection(key, sender)
+            sender_key = ""
+            if sender_obj is not None:
+                if sender_obj["public_key"] is None:
+                    sender_obj["public_key"] = lib.get_public_key(username, PA_U)
+                    time.sleep(0.2)
+                sender_key = sender_obj["public_key"]
+            msg = create_message(
+                message,
+                sender,
+                user_public_key,
+                message_key,
+                n2,
+                sender_key,
+            )
+            conn.send(msg.encode())
 
     print(f"Connection Close: {username}")
     for chan in database:
@@ -186,7 +215,7 @@ def server_program():
         is_user_exist = False
 
         # melakukan handshake
-        message = json.loads(conn.recv(1024).decode())
+        message = json.loads(conn.recv(2048).decode())
         get_des_key = RSA().decrypt(PRIVATE_KEY, message["message_key"])
         msg = lib.des_decrypt(message["body"], get_des_key).replace("\x00", "")
         print(msg)
@@ -214,7 +243,9 @@ def server_program():
         conn.send(msg.encode())
 
         ## menerima nilai n2 yang di kirm oleh user
-        msg, _, n2_user = server_extract_message(conn.recv(1024).decode())
+        msg, _, n2_user = server_extract_message(
+            conn.recv(2048).decode(), public_key_user
+        )
         if n2_user != n2:
             print("n2 not same and valid (message not from the connected user)")
             continue
@@ -227,7 +258,9 @@ def server_program():
         )
         conn.send(msg.encode())
 
-        menu, username, n2_user = server_extract_message(conn.recv(1024).decode())
+        menu, username, n2_user = server_extract_message(
+            conn.recv(2048).decode(), public_key_user
+        )
 
         if n2_user != n2:
             print("n2 not same and valid (message not from the connected user)")
@@ -255,7 +288,9 @@ def server_program():
                 "Enter New Password: ", SERVER, public_key_user, n2
             )
             conn.send(data.encode())
-            password, _, n2_user = server_extract_message(conn.recv(1024).decode())
+            password, _, n2_user = server_extract_message(
+                conn.recv(2048).decode(), public_key_user
+            )
             if n2_user != n2:
                 print("n2 not same and valid")
                 continue
@@ -297,7 +332,9 @@ def server_program():
                     "Enter Key Channel: ", SERVER, public_key_user, n2
                 )
                 conn.send(data.encode())
-                key, _, n2_user = server_extract_message(conn.recv(1024).decode())
+                key, _, n2_user = server_extract_message(
+                    conn.recv(2048).decode(), public_key_user
+                )
 
                 if n2_user != n2:
                     print("n2 not same and valid")
@@ -312,7 +349,7 @@ def server_program():
                 )
                 conn.send(data.encode())
                 input_password, _, n2_user = server_extract_message(
-                    conn.recv(1024).decode()
+                    conn.recv(2048).decode(), public_key_user
                 )
                 if n2_user != n2:
                     print("n2 not same and valid")
