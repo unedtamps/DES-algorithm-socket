@@ -158,8 +158,9 @@ def server_program():
         is_user_exist = False
 
         # ambil dulu public key dari user ini
-        id_key_user, _ = server_extract_message(conn.recv(1024).decode())
-        public_key_user = lib.get_public_key(id_key_user, PA_U)
+        msg, username = server_extract_message(conn.recv(1024).decode())
+        print(msg)
+        public_key_user = lib.get_public_key(username, PA_U)
 
         # Send menu to the client
         msg = server_create_message(

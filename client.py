@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import socket
 import threading
 
@@ -24,6 +25,7 @@ def extract_message(message):
 
 
 def create_message(body, sender):
+    global SERVER_PUBLIC_KEY
     key_dec = lib.key_generation()
     rsa_encrypt_key = RSA().encrypt(SERVER_PUBLIC_KEY, key_dec)
     return json.dumps(
@@ -35,7 +37,7 @@ def create_message(body, sender):
     )
 
 
-def recive_message(client_socket, username):
+def recive_message(client_socket):
     while True:
         global PRIVATE_KEY, PUBLIC_KEY
         msg = client_socket.recv(1024).decode()
@@ -45,9 +47,9 @@ def recive_message(client_socket, username):
         message, sender, message_key = extract_message(msg)
         des_key = RSA().decrypt(PRIVATE_KEY, message_key)
         message = lib.des_decrypt(message, des_key).replace("\x00", "")
-        if sender == SERVER and ("CONNECTED" in message):
-            PUBLIC_KEY, PRIVATE_KEY = RSA().generate_keys()
-            lib.send_public_key(PUBLIC_KEY, username, PA_U)
+        # if sender == SERVER and ("CONNECTED" in message):
+        #     PUBLIC_KEY, PRIVATE_KEY = RSA().generate_keys()
+        #     lib.send_public_key(PUBLIC_KEY, username, PA_U)
 
         print(f"({sender}) {message}")
 
@@ -72,18 +74,17 @@ def client_program():
 
     # send id for public key
 
-    id_temp = lib.key_generation()
+    username = f"{username}-{random.randint(1000,3000)}"
     PUBLIC_KEY, PRIVATE_KEY = RSA().generate_keys()
-    lib.send_public_key(PUBLIC_KEY, id_temp, PA_U)
+    lib.send_public_key(PUBLIC_KEY, username, PA_U)
     SERVER_PUBLIC_KEY = lib.get_public_key(SERVER, PA_U)
-    client_socket.send(create_message(id_temp, username).encode())
+    client_socket.send(
+        create_message(f"Connection from: {username}", username).encode()
+    )
 
     client_thread = threading.Thread(
         target=recive_message,
-        args=(
-            client_socket,
-            username,
-        ),
+        args=(client_socket,),
     )
     client_thread.start()
 
