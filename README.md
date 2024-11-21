@@ -13,3 +13,4 @@
 3. **Multi-Channel Support:** The server can manage multiple channels simultaneously.
 4. **Multi-Client Support:** Each channel can host multiple clients at the same time.
 5. **Sequential Messaging:** Users can send multiple messages sequentially without disruption
+6. **RSA** Implemented RSA algorithm for secure key exchange
