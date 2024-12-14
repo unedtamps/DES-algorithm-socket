@@ -1,13 +1,21 @@
 import random
 
-from sympy import isprime
-
 
 class RSA:
     def __gcd(self, a, b):
         while b != 0:
             a, b = b, a % b
         return a
+
+    def __is_prime(self, n):
+        if n <= 1:
+            return False
+
+        for i in range(2, n):
+            if n % i == 0:
+                return False
+
+        return True
 
     def __mod_inverse(self, e, phi):
         d = 0
@@ -24,7 +32,7 @@ class RSA:
     def __generate_prime(self, start, end):
         while True:
             p = random.randint(start, end)
-            if isprime(p):
+            if self.__is_prime(p):
                 return p
 
     def generate_keys(self):
